@@ -9,6 +9,16 @@ use Illuminate\Support\Facades\Validator;
 class DeviceController extends Controller
 {
     /**
+     * Menampilkan semua perangkat yang terdaftar.
+     *
+     * @return \Illuminate\Http\JsonResponse
+     */
+    public function index()
+    {
+        return Device::latest()->get();
+    }
+
+    /**
      * Mendaftarkan perangkat baru berdasarkan UUID dan nama.
      * Jika perangkat sudah ada, data akan diperbarui.
      *
@@ -17,7 +27,6 @@ class DeviceController extends Controller
      */
     public function register(Request $request)
     {
-        // 1. Validasi input dari PWA, sekarang termasuk 'name'
         $validator = Validator::make($request->all(), [
             'uuid' => 'required|uuid',
             'name' => 'required|string|max:255',
@@ -27,17 +36,30 @@ class DeviceController extends Controller
             return response()->json($validator->errors(), 422);
         }
 
-        // 2. Cari device berdasarkan UUID, atau buat baru jika tidak ada.
-        //    Jika sudah ada, perbarui namanya.
         $device = Device::updateOrCreate(
             ['uuid' => $request->input('uuid')],
-            ['name' => $request->input('name')] // Simpan atau perbarui nama perangkat
+            ['name' => $request->input('name')]
         );
 
-        // 3. Beri respons sukses
         return response()->json([
             'message' => 'Perangkat berhasil terdaftar.',
-            'device' => $device, // Kirim kembali data perangkat yang sudah terdaftar
+            'device' => $device,
         ], 200);
+    }
+
+    /**
+     * Menghapus perangkat.
+     *
+     * @param  int  $id
+     * @return \Illuminate\Http\JsonResponse
+     */
+    public function destroy($id)
+    {
+        $device = Device::find($id);
+        if (!$device) {
+            return response()->json(['message' => 'Perangkat tidak ditemukan'], 404);
+        }
+        $device->delete();
+        return response()->json(null, 204);
     }
 }

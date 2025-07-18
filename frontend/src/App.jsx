@@ -1,10 +1,13 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
+import { Routes, Route } from 'react-router-dom';
 import LoginPage from './pages/LoginPage.jsx';
 import ChatPage from './pages/ChatPage.jsx';
-import { registerDevice } from './api.js'; // Impor fungsi register
+import SenderPage from './pages/SenderPage.jsx';
+import { registerDevice } from './api.js';
 import './index.css';
 
-function App() {
+// Komponen ini menangani logika PWA (login, chat, dll.)
+const PwaContainer = () => {
   const [deviceInfo, setDeviceInfo] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -24,7 +27,6 @@ function App() {
   const handleLoginSuccess = async (name, uuid) => {
     setIsLoading(true);
     try {
-      // Daftarkan perangkat ke backend
       await registerDevice(uuid, name);
       const info = { name, uuid };
       localStorage.setItem('deviceInfo', JSON.stringify(info));
@@ -37,29 +39,43 @@ function App() {
     }
   };
 
-  const handleLogout = () => {
-    if (window.confirm("Apakah Anda yakin ingin logout?")) {
-      localStorage.removeItem('deviceInfo');
-      setDeviceInfo(null);
+  const handleLogout = useCallback((withConfirm = true) => {
+    const doLogout = () => {
+        localStorage.removeItem('deviceInfo');
+        setDeviceInfo(null);
+    };
+
+    if (withConfirm) {
+        if (window.confirm("Apakah Anda yakin ingin logout?")) {
+            doLogout();
+        }
+    } else {
+        doLogout();
     }
-  };
+  }, []); // useCallback akan memastikan fungsi ini tidak dibuat ulang di setiap render
 
   if (isLoading) {
     return <div className="flex justify-center items-center h-screen bg-gray-900 text-white">Memuat Aplikasi...</div>;
   }
 
+  return deviceInfo ? (
+    <ChatPage 
+      deviceName={deviceInfo.name} 
+      deviceUuid={deviceInfo.uuid} 
+      onLogout={handleLogout} 
+    />
+  ) : (
+    <LoginPage onLoginSuccess={handleLoginSuccess} />
+  );
+};
+
+// Komponen App utama sekarang hanya mengatur routing
+function App() {
   return (
-    <>
-      {deviceInfo ? (
-        <ChatPage 
-          deviceName={deviceInfo.name} 
-          deviceUuid={deviceInfo.uuid} 
-          onLogout={handleLogout} 
-        />
-      ) : (
-        <LoginPage onLoginSuccess={handleLoginSuccess} />
-      )}
-    </>
+    <Routes>
+      <Route path="/" element={<PwaContainer />} />
+      <Route path="/sender" element={<SenderPage />} />
+    </Routes>
   );
 }
 

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { FaTrash, FaCopy, FaCheck } from 'react-icons/fa';
-import { getMessages, deleteMessage, deleteAllMessages } from '../api.js';
+import { getMessages, deleteMessage, deleteAllMessages, checkDeviceStatus } from '../api.js';
 
 const ChatPage = ({ deviceName, deviceUuid, onLogout }) => {
   const [messages, setMessages] = useState([]);
@@ -14,33 +14,51 @@ const ChatPage = ({ deviceName, deviceUuid, onLogout }) => {
       setMessages(response.data);
     } catch (error) {
       console.error("Gagal memuat pesan:", error);
-      // Anda bisa menambahkan notifikasi error di sini jika perlu
     } finally {
-      // Hanya set isLoading ke false pada pemuatan pertama
       if (isLoading) {
         setIsLoading(false);
       }
     }
   };
 
-  // useEffect untuk memuat data pertama kali dan memulai polling
+  // useEffect untuk memuat data dan polling pesan
   useEffect(() => {
-    // Ambil pesan saat komponen dimuat
     fetchMessages();
+    const messageIntervalId = setInterval(fetchMessages, 3000);
+    return () => clearInterval(messageIntervalId);
+  }, [deviceUuid]);
 
-    // Atur interval untuk memeriksa pesan baru setiap 3 detik
-    const intervalId = setInterval(() => {
-      fetchMessages();
-    }, 3000); // Polling setiap 3 detik
+  // useEffect untuk memeriksa status perangkat secara berkala
+  useEffect(() => {
+    const checkStatus = async () => {
+      if (!deviceUuid) return;
+      try {
+        const response = await checkDeviceStatus(deviceUuid);
+        if (response.data.status === 'deleted') {
+          // Hapus alert() dan langsung panggil onLogout
+          onLogout(false); // Panggil onLogout tanpa konfirmasi
+        }
+      } catch (error) {
+        // Jika perangkat tidak ditemukan (404), server juga akan menganggapnya 'deleted'
+        // jadi kita bisa logout juga di sini.
+        if (error.response && error.response.status === 404) {
+            onLogout(false);
+        } else {
+            console.error("Gagal memeriksa status perangkat:", error);
+        }
+      }
+    };
 
-    // Bersihkan interval saat komponen dilepas untuk mencegah memory leak
-    return () => clearInterval(intervalId);
-  }, [deviceUuid]); // Efek ini hanya dijalankan ulang jika deviceUuid berubah
+    const statusIntervalId = setInterval(checkStatus, 5000); // Cek status setiap 5 detik
+
+    return () => clearInterval(statusIntervalId);
+  }, [deviceUuid, onLogout]);
+
 
   const handleDeleteMessage = async (id) => {
     try {
       await deleteMessage(id);
-      fetchMessages(); // Ambil data terbaru setelah menghapus
+      fetchMessages();
     } catch (error) {
       console.error("Gagal menghapus pesan:", error);
     }
@@ -50,7 +68,7 @@ const ChatPage = ({ deviceName, deviceUuid, onLogout }) => {
     if (window.confirm("Apakah Anda yakin ingin menghapus semua pesan?")) {
         try {
             await deleteAllMessages(deviceUuid);
-            setMessages([]); // Langsung kosongkan state di frontend
+            setMessages([]);
         } catch (error) {
             console.error("Gagal menghapus semua pesan:", error);
         }
@@ -64,9 +82,9 @@ const ChatPage = ({ deviceName, deviceUuid, onLogout }) => {
     }
     try {
       const allLinks = messages
-        .map(msg => JSON.parse(msg.content)) // Parse setiap konten
-        .flat() // Gabungkan semua array menjadi satu
-        .join('\n'); // Gabungkan link dengan baris baru
+        .map(msg => JSON.parse(msg.content))
+        .flat()
+        .join('\n');
         
       navigator.clipboard.writeText(allLinks).then(() => {
         alert("Semua link berhasil disalin!");
@@ -80,13 +98,18 @@ const ChatPage = ({ deviceName, deviceUuid, onLogout }) => {
     }
   };
 
+  const handleManualLogout = () => {
+    // Fungsi ini sekarang hanya memanggil onLogout, konfirmasi ditangani di App.jsx
+    onLogout(true);
+  }
+
   return (
     <div className="font-sans bg-gray-100 dark:bg-gray-900 min-h-screen flex flex-col">
       <header className="bg-white dark:bg-gray-800 shadow-md sticky top-0 z-10 flex justify-between items-center">
         <div className="flex-1 px-4 py-3">
           <h1 className="text-xl font-bold text-gray-900 dark:text-white">{deviceName}</h1>
         </div>
-        <button onClick={onLogout} className="text-sm text-red-500 hover:underline px-4 py-2">
+        <button onClick={handleManualLogout} className="text-sm text-red-500 hover:underline px-4 py-2">
           Logout
         </button>
       </header>
@@ -154,7 +177,6 @@ const ChatBubble = ({ message, onDelete }) => {
       </a>
     ));
   } catch (e) {
-    // Jika parsing gagal, tampilkan konten mentah untuk debugging
     contentToRender = <p className="text-red-500 text-xs">Konten pesan tidak valid: {message.content}</p>;
   }
 

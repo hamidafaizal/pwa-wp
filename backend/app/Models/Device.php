@@ -17,6 +17,7 @@ class Device extends Model
     protected $fillable = [
         'uuid',
         'name',
+        'status', // Tambahkan 'status'
     ];
 
     /**
